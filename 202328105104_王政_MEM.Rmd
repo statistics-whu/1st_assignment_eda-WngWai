@@ -1,0 +1,377 @@
+---
+title: "关于某家上武汉二手房的数据分析报告"
+author: "2023281051040-王政-MEM"
+output:
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_sections: false
+    fig_caption: true
+    latex_engine: xelatex
+    keep_tex: true
+documentclass: ctexart
+header-includes:
+  - \usepackage{setspace}
+  - \setstretch{1.5}
+  - \usepackage{geometry}
+  - \geometry{a4paper, left=2cm, right=2cm, top=2cm, bottom=2cm}
+---
+
+\newpage
+
+# 数据介绍
+
+本报告链家数据获取方式如下： 数据为2023 年 9 月 12 日获取了[链家武汉二手房网站](https://wh.lianjia.com/ershoufang/)中数据。
+
+• 链家二手房网站默认显示 100 页，每页 30 套房产，因此本数据包括 3000 套房产信息；
+
+• 数据包括了页面可见部分的文本信息，具体字段及说明见作业说明。
+
+**说明：**数据仅用于教学；由于不清楚链家数据的展示规则，因此数据可能并不是武汉二手房市场的随机抽样，结论很可能有很大的偏差，甚至可能是错误的。
+
+**数据概览**
+
+| 变量                  | 解释                                     |
+|:----------------------|:-----------------------------------------|
+| **property_name**     | 小区名字                                 |
+| **property_region**   | 所处区域                                 |
+| **price_ttl**         | 房屋总价，单位万元                       |
+| **price_sqm**         | 房屋单价，单位元                         |
+| **bedrooms**          | 房间数                                   |
+| **livingrooms**       | 客厅数                                   |
+| **building_area**     | 建筑面积                                 |
+| **directions1**       | 房屋主要朝向                             |
+| **directions2**       | 房屋次要朝向                             |
+| **decoration**        | 装修状况                                 |
+| **property_t_height** | 楼栋总层数                               |
+| **property_height**   | 房屋在所在楼栋所处位置，取值为高中低     |
+| **property_style**    | 建筑形式，如板楼、塔楼等                 |
+| **followers**         | 在该二手房网站的关注人数                 |
+| **near_subway**       | 是否靠近地铁                             |
+| **if_2y**             | 产证是否满2年                            |
+| **has_key**           | 中介是否有钥匙，标注"随时看房"表示有钥匙 |
+| **vr**                | 是否支持VR看房                           |
+
+\newpage
+
+# 一、配置环境
+
+## 1、配置环境，导入数据：
+
+```{r setup, results="hide"}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(pander)
+library(modelr)
+library(showtext)
+showtext_auto(enable = TRUE)
+lj <- read.csv("./data/2023-09-12_cleaned.csv")
+```
+
+## 2、查看数据整体结构：
+
+```{r}
+glimpse(lj)
+```
+
+\newpage
+
+# 二、数据清洗
+
+## 1、去重，并查看数据缺失情况
+
+样本数据存在重复情况，由原来的3000个样本数，去重后得到实际可用样本数2515个。数值缺失度较低，对数值分析影响较小。
+
+```{r}
+lj <- distinct(lj)
+pander(summary(is.na(lj)))
+
+```
+
+## 2、在对区域内容进行统计中发现歧义内容，进行修改
+
+查看property_region字段内容：
+
+```{r}
+print(filter(lj, property_region == "VR看装修"))
+
+```
+
+对区域显示为"VR看装修"的字段内容进行修改，修改为"三阳路"：
+
+```{r}
+lj$property_region[lj$property_region=="VR看装修"] <- "三阳路"
+print(filter(lj, property_region == "VR看装修"))
+```
+
+## 3、查看整体分布特征
+
+```{r}
+pander(summary(lj))
+
+```
+
+**可以直观看到：**2023年9月12号链家武汉二手房数据呈现如下特征：
+
+-   房屋总价：最低价10.60万元，最高价1,380.00万元，中位数136.00万元，平均数154.80万元，数据分布呈现右偏分布；
+
+-   房屋单价：最低价1,771.00元/$m^2$，最高价44,656元/$m^2$，中位数14,309元/$m^2$，平均数元15,110/$m^2$，数据分布呈现右偏分布，但右偏幅度较房屋总价较小，原因在于房屋面积不同影响在单价在总价上呈现的差异；
+
+-   建筑面积：最小面积22.77$m^2$，最大面积588.66$m^2$，中位数95.46$m^2$，平均数100.67$m^2$，呈现右偏分布，符合上面房屋面积对房屋总价的初步猜测。
+
+-   房间数、客厅数、楼栋整层数：观察数据平均数，武汉在售二手房多为二至三居室、一至二客厅、平均给楼层24层的中层建筑，较符合常规认知。
+
+\newpage
+
+# 三、数据分析与可视化
+
+## 1、关键字段数据分布情况
+
+### （1）房屋单价和总价的关系
+
+```{r}
+lj %>% 
+  ggplot() +
+    geom_point(aes(x = price_sqm, y = price_ttl, color =  property_region,
+                   group = property_region)) +
+    theme(legend.position = "none") +
+    geom_smooth(aes(x = price_sqm, y = price_ttl)) +
+    coord_cartesian(ylim = c(0, 1000)) 
+    
+    
+```
+
+
+**结论**：房屋价格和房屋总价整体成正相关，存在极个别的异常数据。
+
+### （2）房屋建筑面积、房间数、客厅数分布情况
+
+```{r}
+# 房屋建筑面积分布情况
+ggplot(lj) +
+  geom_histogram(aes(building_area), binwidth = 5) +
+  coord_cartesian(xlim = c(0, 250)) +
+  labs(title = "房屋面积分布情况",  x = "建筑面积",  y = "频数",
+       caption = "DataSource: lj") +
+  theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                       color = "black", size = 10), 
+          plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                color = "black", size = 15, hjust = 0.5,
+                                vjust = 0,5))
+
+```
+
+```{r}
+# 房屋房间数分布情况
+ggplot(lj) +
+  geom_histogram(aes(bedrooms), bins = 30) +
+  labs(title = "房屋房间数分布情况",  x = "房屋房间数",  y = "频数",
+         caption = "DataSource: lj") +
+  theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                       color = "black", size = 10), 
+          plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                color = "black", size = 15, hjust = 0.5,
+                                vjust = 0,5))
+
+```
+
+```{r}
+# 房屋客厅数分布情况
+ggplot(lj) +
+  geom_histogram(aes(livingrooms)) +
+  labs(title = "房屋客厅数分布情况",  x = "房屋客厅数",  y = "频数",
+         caption = "DataSource: lj") +
+  theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                       color = "black", size = 10), 
+          plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                color = "black", size = 15, hjust = 0.5,
+                                vjust = 0,5))
+
+```
+
+**结论**：在售二手房房屋面积多在100$m^2$，存在超出400$m^2$的异常数据；以三室两厅房型为主。
+
+### （3）房屋装修情况
+
+```{r}
+# 根据装修情况进行分组计数
+decoration_count <- lj %>%
+  group_by(decoration) %>%
+  summarise(sum_decoration = n())
+
+# 得到不同装修情况的百分比
+get_rate <- function(x){
+  j <- c(0)
+  sum_count <- sum(x)
+  for (i in 1:length(x)){
+    j[i] <- round(x[i]/sum_count*100, 2)
+  }
+  return(j)
+}
+
+# 绘制饼状图
+label_decoration <- get_rate(decoration_count$sum_decoration) 
+pie(decoration_count$sum_decoration, paste(decoration_count$decoration,
+                                           label_decoration, "%"),
+    radius = 1.0, clockwise=T, main = "房屋装修情况", cex = 0.8)
+
+```
+
+**结论**：近80%的二手房经过装修，其中精装数占总数的50%以上。
+
+## 2、区域维度分析
+
+### （1）各区域在售二手房分布情况
+
+```{r}
+# 对于二手房所在区域进行分组计数
+property_region_count <- lj %>% 
+  group_by(property_region) %>% 
+  summarise(sum_property = n())
+
+# 绘制直方图
+ggplot(property_region_count) +
+  geom_bar(aes(x = sum_property , y = reorder(property_region, sum_property), 
+               color = property_region,fill = property_region),
+           stat = 'identity') +
+  coord_cartesian(ylim = c(0, 90)) +
+  labs(title = "各区域在售二手房分布情况",  x = "在售二手房数量",  y = "区域",
+         caption = "DataSource: lj") +
+  theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                       color = "black", size = 10), 
+        plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                color = "black", size = 15, hjust = 0.5,
+                                vjust = 0,5),
+        legend.position = "none")
+
+```
+
+
+**结论**：在售二手房数量前5名依次是白沙洲140套、盘龙城110套、四新97套、光谷东93套、金银湖81套，较符合近几年武汉活力板块的特征。
+
+### （2）各区域均价分布情况
+
+```{r}
+# 根据区域进行分组，统计区域房屋单价均值
+sqm_mean <- lj %>% 
+  group_by(property_region) %>% 
+  summarise(mean_region = mean(price_sqm))
+
+# 绘制各区域房屋均值分布情况
+ggplot(sqm_mean) +
+  geom_bar(aes(x = mean_region, y = reorder(property_region, mean_region),
+               fill = property_region),
+           stat = "identity") +
+  labs(title = "各区域在售二手房均价分布情况",  x = "在售二手房区域均价",  y = "区域",
+         caption = "DataSource: lj") +
+  theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                       color = "black", size = 10), 
+        plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                color = "black", size = 15, hjust = 0.5,
+                                vjust = 0,5),
+        legend.position = "none") 
+
+```
+
+**结论**：武汉在售二手房地区房屋均价在15000\~20000元间。其中中北路均价最高，超过30000元；阳逻均价最低，接近5000元。
+
+## 3，主要区域的价格分布情况
+
+选取二手房销售数量前30区域做详细的统计分析。
+
+```{r}
+# 选取二手房销售数量前30区域做详细的分析
+property_name <- arrange(property_region_count, desc(sum_property))
+property_name <- property_name[1:30, ]
+
+## 查看top30区域的在售房屋数量分布
+property_name %>% 
+  ggplot(aes(x = sum_property, y = reorder(property_region, sum_property),
+             fill = property_region)) +
+    geom_bar(stat = 'identity') +
+    labs(title = "二手房出售数量前top30区域",  x = "二手房数量",  y = "区域",
+         caption = "DataSource: lj") +
+    theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                       color = "black", size = 10, angle = 90), 
+          plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                color = "black", size = 15, hjust = 0.5,
+                                vjust = 0,5))
+```
+
+### （1）查看二手房销售数量前30区域屋总价分布情况
+
+```{r}
+# 从lj数据库中选择对应详细数据
+property_names <- property_name$property_region
+lj_top30 <- dplyr::filter(lj, property_region %in% property_names)
+
+# 查看区域总价的箱线图
+ggplot(lj_top30) +
+  geom_boxplot(aes(x = property_region, y = price_ttl, color = property_region)) +
+  labs(title = "前top30区域房屋总价分布情况",  x = "所属区域",  y = "房屋总价",
+       caption = "DataSource: lj") +
+  theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                   color = "black", size = 10, angle = 90), 
+        plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                  color = "black", size = 15, hjust = 0.5,
+                                  vjust = 0,5),
+        legend.position = 'none')
+
+```
+
+**结论**：其中积玉桥、中南丁字桥区等区域房屋总价离散度较高；盘龙城、蔡甸城区等区域房屋总价集中性度较高；金银湖数据存在异常点，需要针对性分析。
+
+### （2）区域房屋单价分布情况
+
+```{r}
+# 查看区域房屋单价的箱线图
+ggplot(lj_top30) +
+  geom_boxplot(aes(x = property_region, y = price_sqm, color = property_region)) +
+  labs(title = "前top30区域房屋总价分布情况",  x = "所属区域",  y = "房屋单价",
+       caption = "DataSource: lj") +
+  theme(axis.text.x = element_text(family = "wqy-microhei", face = "bold",
+                                   color = "black", size = 10, angle = 90), 
+        plot.title = element_text(family = "wqy-microhei", face = "bold",
+                                  color = "black", size = 15, hjust = 0.5,
+                                  vjust = 0,5),
+        legend.position = "none")
+```
+
+**结论**：其中东湖东、南湖沃尔玛、中南丁字桥区等区域房屋单价离散度较高；堤角、盘龙城、阳逻等区域房屋单价集中性度较高；中南丁子桥房屋单价分布右偏明显，说明地区房屋单价差异较大。
+
+## 4, 房屋单价与房屋总价模型
+
+通过线性回归分析，构建房屋单价与房屋总价的线性回归模型：
+
+```{r}
+# 线性回归
+cost_line_regression <- function(w){
+  sum((lj$price_ttl - (w[1]*lj$price_sqm + w[2]))^2)
+}
+
+best <- optim(c(0,0), cost_line_regression)
+cat("优化的参数：", best$par, "\n")
+cat("目标函数：", best$value, "\n")
+cat("是否收敛：", best$convergence)
+```
+
+查看残值情况：
+
+```{r}
+lj_line_regression <- data.frame(
+  x = lj$price_sqm,
+  y = lj$price_ttl
+)
+df_data <- add_residuals(lj_line_regression,
+                         lm(y ~ x, data = lj_line_regression))
+cat("残值均值：",mean(df_data$resid))
+
+```
+
+**结论**：因为房屋单价是万元，目标函数结果较大，说明模型的预测结果的偏差较大，存在特征值选取不合适或模型选取存在问题，需要进一步改进。但残值均值小，说明对整体预测结果偏差较小。
+
+\newpage
+
+# 四、总结
+经过三年疫情影响和国内房地产市场步入存量时代，“房住不炒”的房地产政策渐入人心。通过对2023年9月12日链家上的武汉二手房的数据进行分析，为个人筛选合适价格区间的区域精装二手房提供了一定的参考意见。
+ 
